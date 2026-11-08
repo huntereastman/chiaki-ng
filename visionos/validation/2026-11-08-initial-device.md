@@ -1,5 +1,7 @@
 # Initial physical-device qualification — 2026-11-08
 
+**Later qualification correction:** the pairing investigation found that recursive native-archive packaging included a stale `libchiaki 2.a` backup alongside the intended target. The app's source metadata and signed executable digest below still identify that installed artifact, but they do not prove that every linked native object came from the advertised commit. See `2026-11-08-pairing-repair.md` for the reproduced packaging defect and corrected archive selection. Initial source-binding claims must be read with this limitation.
+
 ## Source binding
 
 - Upstream repository: `https://github.com/chiaki-ng/chiaki-ng.git`

@@ -19,6 +19,23 @@ from datetime import datetime, timezone
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 
+# Only named CMake target outputs are eligible. File Provider backup copies in
+# the build tree must never become additional linker inputs.
+CORE_ARCHIVES = (
+    'libchiaki.a', 'libnanopb.a', 'libjerasure.a', 'libgf_complete.a',
+    'Dependencies/mbedtls/library/libmbedcrypto.a',
+    'Dependencies/mbedtls/3rdparty/everest/libeverest.a',
+    'Dependencies/mbedtls/3rdparty/p256-m/libp256m.a',
+    'Dependencies/opus/libopus.a',
+)
+
+def core_archives(build):
+    paths = [build / name for name in CORE_ARCHIVES]
+    missing = [str(path) for path in paths if not path.is_file()]
+    if missing:
+        raise RuntimeError('Missing CMake target archives: ' + ', '.join(missing))
+    return paths
+
 def run(*args, **kwargs):
     subprocess.run([str(x) for x in args], cwd=ROOT, check=True, **kwargs)
 
@@ -111,9 +128,11 @@ def main():
         run(HERE / '.build-tools/bin/ctest', '--test-dir', build, '--output-on-failure')
         run('xcrun', 'swiftc', HERE / 'Sources/AnnexB.swift', HERE / 'Tests/BitstreamTests.swift', '-o', build / 'bitstream-tests')
         run(build / 'bitstream-tests')
+        run(sys.executable, HERE / 'Tests/BuildTests.py')
         return
-    archives = [p for p in build.rglob('*.a') if p.name != 'libChiakiVisionCore.a']
-    run('xcrun', '--sdk', 'xros', 'libtool', '-static', '-o', build / 'libChiakiVisionCore.a', *sorted(archives))
+    archives = core_archives(build)
+    archive_digests = {str(path.relative_to(build)): hashlib.sha256(path.read_bytes()).hexdigest() for path in archives}
+    run('xcrun', '--sdk', 'xros', 'libtool', '-static', '-o', build / 'libChiakiVisionCore.a', *archives)
     # Reuse the public upstream OAuth application constants without duplicating
     # them in another committed source file. User tokens never enter this file.
     upstream = (ROOT / 'gui/include/psnaccountid.h').read_text()
@@ -147,6 +166,8 @@ def main():
         'trackedChanges': output('git', 'status', '--porcelain', '--untracked-files=all'),
         'submodules': output('git', 'submodule', 'status', '--recursive'),
         'appPath': str(app), 'executableSHA256': hashlib.sha256(executable.read_bytes()).hexdigest(),
+        'nativeArchives': archive_digests,
+        'combinedNativeArchiveSHA256': hashlib.sha256((build / 'libChiakiVisionCore.a').read_bytes()).hexdigest(),
         'xcode': output('xcodebuild', '-version'), 'target': 'physical visionOS arm64', 'distribution': 'local development only'}
     (build / 'build-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print('Built physical-device app:', app)

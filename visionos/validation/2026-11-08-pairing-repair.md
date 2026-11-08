@@ -29,6 +29,16 @@ Packaging now selects only the eight explicit CMake target archives, fails if an
 
 The next physical diagnostic must verify that the signed executable actually contains the fresh native diagnostic marker before installation, then repeat the controlled fixture attempt. The stale backup is preserved locally as investigation evidence and is no longer a linker input.
 
+## Actual failing operation
+
+After correcting packaging, the signed executable was checked for the fresh C and Swift diagnostic markers before installation. The controlled attempt with source `ff36e26256e9ce8d0bcce866ebc1886d2526b059` (executable SHA-256 `23076c1788bdd17f53beb269ab60d13fea3c7112cc169c59e370c42fef323ab8`) generated the intended SIGABRT crash record. The interrupted thread was the UI thread; this did not identify the originating I/O operation.
+
+A second diagnostic (`99170c2f92741d6259b666a4b2045548680c52fe`, executable SHA-256 `82478eb737ef879f722411c1a08dc61300b6609c9a54c4ba451a28b86053d196`) temporarily ignored SIGPIPE solely for the opt-in inspection run and wrote only native warning/error messages and lifecycle labels to the app's sandbox. It reported `Regist failed to send search: Broken pipe`, followed by the normal registration-failure callback. The test server received no packet. Stop-pipe descriptors remained valid through cancellation. This isolates the unprotected **UDP registration-search socket**, before the already-protected TCP request socket is created.
+
+The search socket now applies Apple's per-socket signal suppression while retaining its existing blocking mode. Stream and datagram closed-write tests cover both blocking modes. The temporary signal handler and process-wide ignore mode have been removed; the remaining opt-in file logger never changes signal disposition. The next controlled physical test must run with default process signal handling and demonstrate that a failed search returns an app error while the process remains alive.
+
+Local-network access is being checked separately. The observed EPIPE does not by itself prove the permission setting. Apple's [local network privacy technote](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy) explains that iOS, iPadOS and visionOS share this privacy model and that a first operation may be denied before the permission alert is answered. A correct usage description has been verified in the signed app's actual Info.plist; the user's headset setting is still pending.
+
 The exact remaining native failure, original pairing retry and gameplay acceptance remain pending. Sign-in and pairing Keychain items are preserved; the app is updated in place. No TestFlight upload, App Review submission, simulator creation or device reset is part of this repair.
 
 Raw logs and device receipts remain ignored local evidence. This is a sanitized account and does not preserve their exact original bytes.

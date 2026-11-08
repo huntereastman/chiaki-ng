@@ -561,6 +561,17 @@ static chiaki_socket_t regist_search_connect(ChiakiRegist *regist, struct addrin
 			CHIAKI_LOGE(regist->log, "Regist failed to create socket for search");
 			continue;
 		}
+#ifdef __APPLE__
+		// The first UDP send can fail with EPIPE before any TCP socket exists.
+		// Keep the existing blocking mode and suppress socket-generated SIGPIPE.
+		if(chiaki_socket_set_nonblock(sock, false) != CHIAKI_ERR_SUCCESS)
+		{
+			CHIAKI_LOGE(regist->log, "Regist failed to configure search socket");
+			CHIAKI_SOCKET_CLOSE(sock);
+			sock = CHIAKI_INVALID_SOCKET;
+			continue;
+		}
+#endif
 		int r = 0;
 		if(regist->info.broadcast)
 		{

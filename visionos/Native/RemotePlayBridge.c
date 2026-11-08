@@ -5,7 +5,6 @@
 #include <chiaki/opusdecoder.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,12 +26,9 @@ static pthread_once_t init_once = PTHREAD_ONCE_INIT;
 static int init_result;
 static void init_library(void) { init_result = chiaki_lib_init(); }
 
-// Temporary opt-in diagnosis: SIGABRT produces a device crash record containing
-// the interrupted SIGPIPE call stack. Never enabled in an ordinary launch.
-static void diagnostic_sigpipe(int number) { (void)number; abort(); }
 static void diagnostic_log(ChiakiLogLevel level, const char *message, void *user) {
     (void)level; (void)user;
-    if(!getenv("VRP_DIAGNOSTIC_SIGPIPE")) return;
+    if(!getenv("VRP_DIAGNOSTICS")) return;
     const char *home = getenv("HOME");
     if(!home) return;
     int saved_errno = errno;
@@ -43,7 +39,7 @@ static void diagnostic_log(ChiakiLogLevel level, const char *message, void *user
     errno = saved_errno;
 }
 static void diagnostic_state(VRPClient *c, const char *phase) {
-    if(!getenv("VRP_DIAGNOSTIC_SIGPIPE")) return;
+    if(!getenv("VRP_DIAGNOSTICS")) return;
     char message[256];
     snprintf(message, sizeof(message), "%s: registering=%d initialized=%d stop-fds=%d/%d", phase,
              c->registering, c->initialized, c->registration.stop_pipe.fds[0], c->registration.stop_pipe.fds[1]);
@@ -101,8 +97,7 @@ static void session_callback(ChiakiEvent *event, void *user) {
     }
 }
 VRPClient *vrp_create(VRPCallbacks callbacks, void *user) {
-    const char *diagnostic = getenv("VRP_DIAGNOSTIC_SIGPIPE");
-    if(diagnostic) signal(SIGPIPE, strcmp(diagnostic, "inspect") == 0 ? SIG_IGN : diagnostic_sigpipe);
+    const bool diagnostic = getenv("VRP_DIAGNOSTICS") != NULL;
     pthread_once(&init_once, init_library);
     if(init_result) return NULL;
     VRPClient *c = calloc(1, sizeof(*c));

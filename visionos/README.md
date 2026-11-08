@@ -52,7 +52,13 @@ python3 visionos/build.py device --device YOUR_ALREADY_PAIRED_VISION_PRO_UDID
 
 The script builds for a physical `visionOS/arm64` destination. It creates no simulator. Device signing uses an existing, unexpired local wildcard development profile that already covers the specified device and a matching signing identity. It does not register a device, create an App ID, refresh a profile or upload a build. The current project selects Hunter's existing development team; another developer should change the team/profile selection for their own environment.
 
-The signed app is at `visionos/DerivedData/Build/Products/Debug-xros/VisionRemotePlay.app`. Build source and executable hashes are recorded in `visionos/build/xros/build-manifest.json`. The app's Info.plist carries the source SHA and source digest. No TestFlight or public distribution is part of this workflow.
+The unsigned build product is under `visionos/DerivedData/Build/Products/Debug-xros/`. The signed app is staged in a task-owned directory under `~/Library/Caches/codex-vision-remote-play/` to avoid File Provider metadata being attached during signing. Its exact path, build source and executable hashes are recorded in `visionos/build/xros/build-manifest.json`. The app's Info.plist carries the source SHA and source digest. No TestFlight or public distribution is part of this workflow.
+
+Install and launch with the guarded entry point, which checks source freshness, embedded source identity and the signed executable digest before any device mutation:
+
+```sh
+python3 visionos/install.py --device YOUR_ALREADY_PAIRED_VISION_PRO_UDID --host YOUR_PS5_LOCAL_IP
+```
 
 ## Initial use
 

@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 HERE = Path(__file__).resolve().parent
@@ -131,7 +132,14 @@ def main():
         '-derivedDataPath', HERE / 'DerivedData', 'build',
         'CODE_SIGNING_ALLOWED=NO', 'CODE_SIGNING_REQUIRED=NO',
         f'PROTOTYPE_SOURCE_SHA={sha}', f'PROTOTYPE_SOURCE_DIGEST={fingerprint}')
-    app = HERE / 'DerivedData/Build/Products/Debug-xros/VisionRemotePlay.app'
+    unsigned_app = HERE / 'DerivedData/Build/Products/Debug-xros/VisionRemotePlay.app'
+    # Documents can be File Provider managed and acquire Finder metadata while
+    # codesign is running. Stage only the built app in a task-owned native cache.
+    cache = Path.home() / 'Library/Caches/codex-vision-remote-play/01a1b9d2-1401-7f01-bc65-11542d6eb456'
+    cache.mkdir(parents=True, exist_ok=True)
+    stage = Path(tempfile.mkdtemp(prefix=sha[:12] + '-', dir=cache))
+    app = stage / 'VisionRemotePlay.app'
+    run('ditto', '--norsrc', '--noextattr', unsigned_app, app)
     executable = app / 'VisionRemotePlay'
     sign_app(app, args.device)
     manifest = {'upstreamBase': '43728af2e639fecb8a7af1cd68c29820a40de973',

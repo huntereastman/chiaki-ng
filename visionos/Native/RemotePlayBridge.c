@@ -5,7 +5,9 @@
 #include <chiaki/opusdecoder.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct VRPClient {
@@ -22,6 +24,10 @@ struct VRPClient {
 static pthread_once_t init_once = PTHREAD_ONCE_INIT;
 static int init_result;
 static void init_library(void) { init_result = chiaki_lib_init(); }
+
+// Temporary opt-in diagnosis: SIGABRT produces a device crash record containing
+// the interrupted SIGPIPE call stack. Never enabled in an ordinary launch.
+static void diagnostic_sigpipe(int number) { (void)number; abort(); }
 
 static bool local_host(const char *host) {
     struct in_addr address;
@@ -73,6 +79,7 @@ static void session_callback(ChiakiEvent *event, void *user) {
     }
 }
 VRPClient *vrp_create(VRPCallbacks callbacks, void *user) {
+    if(getenv("VRP_DIAGNOSTIC_SIGPIPE")) signal(SIGPIPE, diagnostic_sigpipe);
     pthread_once(&init_once, init_library);
     if(init_result) return NULL;
     VRPClient *c = calloc(1, sizeof(*c));

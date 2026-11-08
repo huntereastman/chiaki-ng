@@ -15,6 +15,10 @@ The on-device debugger could attach but could not halt the launched process, and
 
 ## Delivery boundary
 
-The repaired physical-device build, installation, original pairing retry and gameplay acceptance are pending at this checkpoint. Sign-in and pairing Keychain items are preserved; the app is updated in place. No TestFlight upload, App Review submission, simulator creation or device reset is part of this repair.
+The first candidate (`5a030ce9c59c3f5305a96dfb1fb4e4175db9540f`, runtime digest `13e73e38d6aed9f5126457cdcd8eff3b7bb0be7f1e9d6165a72c0ed79e688601`, signed executable SHA-256 `7ed3cbd0377ef7cf20632640153ea0b00e0dd736113b28078da3c6ee4fb0ef74`) built, installed and launched. Its own sandbox diagnostic at `2026-11-08T08:45:19Z` confirmed the matching source and active scene. Hunter's pairing retry still terminated with signal 13. The socket regression is fixed, but this does **not** establish a fix for the reported pairing termination.
+
+An opt-in diagnostic launch now converts SIGPIPE to SIGABRT to obtain an interrupted call stack, and a Debug-only fixture driver can attempt registration with synthetic account/code data against a developer-supplied local test console. These diagnostic options are absent from ordinary launches. No real PlayStation account data is used by the fixture driver, and it does not save a pairing.
+
+The exact remaining native failure, original pairing retry and gameplay acceptance remain pending. Sign-in and pairing Keychain items are preserved; the app is updated in place. No TestFlight upload, App Review submission, simulator creation or device reset is part of this repair.
 
 Raw logs and device receipts remain ignored local evidence. This is a sanitized account and does not preserve their exact original bytes.

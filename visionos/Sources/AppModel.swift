@@ -65,6 +65,15 @@ import SwiftUI
             Task { @MainActor in self?.refreshStats() }
         }
         writeDiagnostics()
+#if DEBUG
+        // Uses synthetic data against an explicitly supplied local fixture.
+        // Does not read, replace or save the user's account or console pairing.
+        if let fixtureHost = ProcessInfo.processInfo.environment["VRP_DIAGNOSTIC_PAIR_HOST"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.engine.pair(host: fixtureHost, account: Data(repeating: 0, count: 8), pin: 0)
+            }
+        }
+#endif
     }
     func setSceneActive(_ active: Bool) { sceneActive = active; writeDiagnostics() }
     func saveAccount(_ data: Data) {

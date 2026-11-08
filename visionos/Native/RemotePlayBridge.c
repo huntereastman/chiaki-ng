@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 struct VRPClient {
     VRPCallbacks callbacks;
@@ -28,6 +30,25 @@ static void init_library(void) { init_result = chiaki_lib_init(); }
 // Temporary opt-in diagnosis: SIGABRT produces a device crash record containing
 // the interrupted SIGPIPE call stack. Never enabled in an ordinary launch.
 static void diagnostic_sigpipe(int number) { (void)number; abort(); }
+static void diagnostic_log(ChiakiLogLevel level, const char *message, void *user) {
+    (void)level; (void)user;
+    if(!getenv("VRP_DIAGNOSTIC_SIGPIPE")) return;
+    const char *home = getenv("HOME");
+    if(!home) return;
+    int saved_errno = errno;
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/Documents/native-pairing-diagnostic.txt", home);
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    if(fd >= 0) { write(fd, message, strlen(message)); write(fd, "\n", 1); close(fd); }
+    errno = saved_errno;
+}
+static void diagnostic_state(VRPClient *c, const char *phase) {
+    if(!getenv("VRP_DIAGNOSTIC_SIGPIPE")) return;
+    char message[256];
+    snprintf(message, sizeof(message), "%s: registering=%d initialized=%d stop-fds=%d/%d", phase,
+             c->registering, c->initialized, c->registration.stop_pipe.fds[0], c->registration.stop_pipe.fds[1]);
+    diagnostic_log(0, message, NULL);
+}
 
 static bool local_host(const char *host) {
     struct in_addr address;
@@ -37,6 +58,7 @@ static bool local_host(const char *host) {
         (ip >> 20) == 0xac1 || (ip >> 16) == 0xa9fe;
 }
 static void status(VRPClient *c, int state, const char *message) {
+    diagnostic_log(0, message, NULL);
     if(c->callbacks.status) c->callbacks.status(c->user, state, message);
 }
 static void registration_callback(ChiakiRegistEvent *event, void *user) {
@@ -79,7 +101,8 @@ static void session_callback(ChiakiEvent *event, void *user) {
     }
 }
 VRPClient *vrp_create(VRPCallbacks callbacks, void *user) {
-    if(getenv("VRP_DIAGNOSTIC_SIGPIPE")) signal(SIGPIPE, diagnostic_sigpipe);
+    const char *diagnostic = getenv("VRP_DIAGNOSTIC_SIGPIPE");
+    if(diagnostic) signal(SIGPIPE, strcmp(diagnostic, "inspect") == 0 ? SIG_IGN : diagnostic_sigpipe);
     pthread_once(&init_once, init_library);
     if(init_result) return NULL;
     VRPClient *c = calloc(1, sizeof(*c));
@@ -87,13 +110,16 @@ VRPClient *vrp_create(VRPCallbacks callbacks, void *user) {
     c->callbacks = callbacks; c->user = user;
     // Upstream verbose logs can contain pairing secrets. Use callback status only.
     chiaki_log_init(&c->log, 0, NULL, NULL);
+    if(diagnostic) chiaki_log_init(&c->log, CHIAKI_LOG_ERROR | CHIAKI_LOG_WARNING, diagnostic_log, NULL);
     chiaki_opus_decoder_init(&c->audio, &c->log);
     chiaki_opus_decoder_set_cb(&c->audio, audio_format_callback, audio_callback, c);
     return c;
 }
 void vrp_finish_registration(VRPClient *c) {
     if(c && c->registering) {
+        diagnostic_state(c, "before registration stop");
         chiaki_regist_stop(&c->registration);
+        diagnostic_state(c, "after registration stop");
         chiaki_regist_fini(&c->registration);
         c->registering = false;
     }
@@ -101,6 +127,7 @@ void vrp_finish_registration(VRPClient *c) {
 int vrp_register(VRPClient *c, const char *host, const uint8_t *account_id, size_t account_size, uint32_t pin) {
     if(!c || !local_host(host) || !account_id || account_size != 8 || pin > 99999999)
         return CHIAKI_ERR_INVALID_DATA;
+    diagnostic_state(c, "register entry");
     vrp_finish_registration(c);
     vrp_disconnect(c);
     snprintf(c->registration_host, sizeof(c->registration_host), "%s", host);
@@ -111,6 +138,7 @@ int vrp_register(VRPClient *c, const char *host, const uint8_t *account_id, size
     memcpy(info.psn_account_id, account_id, 8);
     info.pin = pin;
     int result = chiaki_regist_start(&c->registration, &c->log, &info, registration_callback, c);
+    diagnostic_state(c, "registration start returned");
     if(!result) { c->registering = true; status(c, 1, "Pairing with PS5…"); }
     return result;
 }

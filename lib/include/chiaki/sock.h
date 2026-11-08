@@ -34,6 +34,8 @@ typedef int chiaki_socket_t;
 #define CHIAKI_SOCKET_BUF_TYPE void *
 #endif
 
+// Configures socket blocking mode. On Apple platforms, also suppresses SIGPIPE
+// on this socket so a disconnected peer is reported as an I/O error.
 CHIAKI_EXPORT ChiakiErrorCode chiaki_socket_set_nonblock(chiaki_socket_t sock, bool nonblock);
 
 #ifdef __cplusplus

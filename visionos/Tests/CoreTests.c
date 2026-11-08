@@ -5,8 +5,47 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef __APPLE__
+#include "../../lib/src/utils.h"
+#include <signal.h>
+#include <sys/wait.h>
+
+static bool closed_peer_returns_error(bool nonblock) {
+    // Keep the default signal disposition in a child so this catches process
+    // termination even when the test runner itself ignores SIGPIPE.
+    pid_t child = fork();
+    if(child < 0) return false;
+    if(child == 0) {
+        signal(SIGPIPE, SIG_DFL);
+        int sockets[2];
+        if(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets)) _exit(2);
+        if(chiaki_socket_set_nonblock(sockets[0], nonblock)) _exit(3);
+        const uint8_t request[] = "registration request";
+        uint8_t received[sizeof(request)];
+        if(chiaki_send_fully(NULL, sockets[0], request, sizeof(request), 100) != CHIAKI_ERR_SUCCESS ||
+           recv(sockets[1], received, sizeof(received), 0) != sizeof(received) ||
+           memcmp(request, received, sizeof(request))) _exit(5);
+        close(sockets[1]);
+        ChiakiErrorCode result = chiaki_send_fully(NULL, sockets[0], request, sizeof(request), 100);
+        close(sockets[0]);
+        _exit(result == CHIAKI_ERR_NETWORK ? 0 : 4);
+    }
+    int result;
+    if(waitpid(child, &result, 0) != child) return false;
+    if(WIFSIGNALED(result)) {
+        fprintf(stderr, "Closed-peer write terminated with signal %d (nonblock=%d).\n",
+                WTERMSIG(result), nonblock);
+        return false;
+    }
+    return WIFEXITED(result) && WEXITSTATUS(result) == 0;
+}
+#endif
 
 int main(void) {
+#ifdef __APPLE__
+    if(!closed_peer_returns_error(true) || !closed_peer_returns_error(false)) return 1;
+    puts("Closed-peer writes return network errors without terminating the process.");
+#endif
     VRPCallbacks callbacks = {0};
     VRPClient *client = vrp_create(callbacks, NULL);
     assert(client);

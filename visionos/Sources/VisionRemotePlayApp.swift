@@ -5,13 +5,19 @@ import SwiftUI
 @main struct VisionRemotePlayApp: App {
     @StateObject private var model = AppModel()
     var body: some Scene {
-        WindowGroup { RemotePlayView(model: model) }
+        WindowGroup(id: "remote-play") { RemotePlayView(model: model, lighting: model.lighting) }
             .defaultSize(width: 1180, height: 760)
+        ImmersiveSpace(id: "ambient-playback") { AmbientPlaybackSpace(model: model, lighting: model.lighting) }
+            .immersionStyle(selection: .constant(.mixed), in: .mixed)
     }
 }
 struct RemotePlayView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var lighting: AmbientLighting
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var signIn = false
     @State private var advanced = false
     var body: some View {
@@ -39,6 +45,7 @@ struct RemotePlayView: View {
                                     Text("1080p · 60 fps").tag(1080)
                                     Text("720p · 60 fps").tag(720)
                                 }.disabled(model.connected || model.busy)
+                                Toggle("Ambient lighting", isOn: $lighting.enabled)
                             }.padding(.top, 8)
                         }
                         GroupBox("PlayStation account") {
@@ -84,7 +91,16 @@ struct RemotePlayView: View {
                 }.frame(width: 350)
                 VStack(spacing: 14) {
                     ZStack {
-                        StreamView(pipeline: model.engine.video)
+                        if model.playbackSpace == .immersive || model.playbackSpace == .closing {
+                            Color.clear
+                            Button("Show player") {
+                                model.prefersWindow = true
+                                model.playbackSpace = .closing
+                                Task { await dismissImmersiveSpace() }
+                            }
+                        } else {
+                            StreamView(pipeline: model.engine.video)
+                        }
                         if !model.showingVideo {
                             ContentUnavailableView("Ready when you are", systemImage: "play.rectangle",
                                 description: Text("Pair your console, then play on your virtual screen."))
@@ -92,6 +108,9 @@ struct RemotePlayView: View {
                             ProgressView("Waiting for your PS5’s picture…")
                         }
                     }.aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 18))
+                    .background {
+                        if lighting.enabled { AmbientHalo(palette: lighting.palette).padding(-38) }
+                    }
                     HStack {
                         if model.busy { ProgressView().controlSize(.small) }
                         Text(model.status).font(.callout)
@@ -121,10 +140,41 @@ struct RemotePlayView: View {
         }.padding(28)
         .handlesGameControllerEvents(matching: .gamepad)
         .sheet(isPresented: $signIn) { PlayStationSignIn { model.saveAccount($0) } }
-        .onAppear { model.setSceneActive(true); model.engine.updateController() }
+        .onAppear { model.windowPresented = true; model.setSceneActive(true); model.engine.updateController(); presentAmbientPlayer() }
+        .onDisappear { model.windowPresented = false; model.setSceneActive(false) }
+        .onChange(of: model.showingVideo) { _, playing in if playing { presentAmbientPlayer() } }
+        .onChange(of: lighting.enabled) { _, enabled in
+            if enabled { model.prefersWindow = false; presentAmbientPlayer() }
+        }
         .onChange(of: scenePhase) { _, phase in
-            model.setSceneActive(phase == .active)
-            if phase == .background && model.connected { model.disconnect() }
+            model.setSceneActive(phase == .active, background: phase == .background)
+        }
+    }
+    private func presentAmbientPlayer() {
+        guard model.showingVideo, lighting.enabled, !model.prefersWindow,
+              model.playbackSpace == .window else { return }
+        model.playbackSpace = .opening
+        let request = UUID()
+        model.spaceRequest = request
+        Task { @MainActor in
+            let result = await openImmersiveSpace(id: "ambient-playback")
+            guard model.spaceRequest == request else { return }
+            switch result {
+            case .opened:
+                guard model.showingVideo else {
+                    model.playbackSpace = .closing
+                    await dismissImmersiveSpace()
+                    return
+                }
+                model.playbackSpace = .immersive
+                dismissWindow(id: "remote-play")
+            case .userCancelled, .error:
+                model.playbackSpace = .window
+                model.prefersWindow = true
+            @unknown default:
+                model.playbackSpace = .window
+                model.prefersWindow = true
+            }
         }
     }
 }

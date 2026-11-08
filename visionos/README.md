@@ -12,6 +12,7 @@ Source: <https://github.com/huntereastman/chiaki-ng/tree/codex/visionos-prototyp
 - Physical game controller input through Apple's Game Controller framework.
 - Account IDs and console pairing keys stored in the device's Keychain.
 - Local diagnostic counters and build provenance, without account IDs, pairing codes, OAuth tokens or console keys.
+- An ambient-lighting proof with a saved on/off toggle, directional screen glow, and a mixed-space player. On visionOS 27 it also uses two bounded surroundings lights.
 
 Internet traversal, PSN cloud gaming, HDR, frame generation, upscaling, immersive curved screens, haptics and adaptive triggers are outside this first prototype. The local-only target excludes the PSN/UPnP/TLS traversal stack and rejects non-private IPv4 console addresses. That restriction does not change the upstream desktop build.
 
@@ -44,7 +45,7 @@ git -C visionos/Dependencies/mbedtls submodule update --init --depth 1 framework
 python3 visionos/build.py host
 ```
 
-Host validation runs the upstream protocol tests, local-only bridge validation and ECDH key agreement, stream/datagram EPIPE regressions, Swift Annex B parser boundary tests, and real-link archive-selection regressions.
+Host validation runs the upstream protocol tests, local-only bridge validation and ECDH key agreement, stream/datagram EPIPE regressions, Swift Annex B parser boundary tests, and real-link archive-selection regressions. Ambient tests exercise actual color extraction, saved on/off preferences, stopping sampling, a synthetic H.264 stream through the shared decoder, and rejecting old decoded output after reset. They do not establish headset appearance or streaming performance.
 
 For the physical Vision Pro:
 
@@ -62,6 +63,8 @@ Install and launch with the guarded entry point, which checks source freshness, 
 python3 visionos/install.py --device YOUR_ALREADY_PAIRED_VISION_PRO_UDID --host YOUR_PS5_LOCAL_IP
 ```
 
+Use `--no-launch` to install the qualified app while leaving launch for an unlocked headset.
+
 ## Initial use
 
 1. Enable Remote Play on the PS5 and keep both devices on the same network.
@@ -71,6 +74,22 @@ python3 visionos/install.py --device YOUR_ALREADY_PAIRED_VISION_PRO_UDID --host 
 5. Pair a physical controller to Vision Pro, then select Play.
 
 Disconnect ends the stream without putting the console to sleep. Forget Console deletes only this prototype's saved console pairing. Closing/backgrounding the app stops the stream.
+
+## Ambient-lighting proof
+
+`Ambient lighting` is the single saved setting beside picture quality. With it enabled, Play opens a mixed immersive player with a soft directional halo. The compact playback strip fades after four seconds; tap the player to reveal it. VoiceOver keeps the strip available. Toggle lighting during play to compare off/on; the Window button returns to ordinary window playback. Canceling immersive presentation retains window playback.
+
+The halo follows four sampled image-edge colors with time-based smoothing. The image remains unobscured. Sampling runs at up to 5 Hz on a separate queue, has at most one analysis in flight, stops when lighting is off/inactive, and fades to black when video stalls. The visionOS 27 lights are bounded and removed under serious thermal pressure; older supported systems retain the halo.
+
+The first path tries the renderer's displayed pixel buffer. Apple's API returns nil at nonzero renderer rates; a native macOS probe observes rate 1 and no buffers. After three unavailable samples on a fresh stream, the app switches to one VideoToolbox decoder and shares its output with the display and color sampler. It flushes the renderer's compressed path, waits for an IDR, bounds in-flight decode work, and discards prior-session output. It does not run a second full-rate decoder for the lights. Once selected, that decoder remains the playback path for the session; switching the lighting off stops optional sampling, without switching decoders mid-game.
+
+For a synthetic headset check without contacting a PS5, install the Debug build and launch it explicitly with `VRP_AMBIENT_PROOF=1`. The fixture loops app-owned H.264 color frames and never changes account or pairing data. It is excluded from Release code and has no customer-facing demo control. Normal launches do not use it.
+
+```sh
+xcrun devicectl device process launch --device YOUR_ALREADY_PAIRED_VISION_PRO_UDID --terminate-existing --environment-variables '{"VRP_AMBIENT_PROOF":"1"}' dev.hunter.visionremoteplay
+```
+
+`Tests/GenerateAmbientFixture.swift` reproduces `Resources/AmbientProof.h264frames`. `Tests/RendererReadbackTests.swift` optionally takes an output folder as its second argument to render the actual halo component on/off with decoded synthetic pixels. Those native previews are not headset captures. Qualify real PS5 playback, the on/off setting, room spill, comfort and frame pacing separately on physical Vision Pro.
 
 ## Runtime evidence
 

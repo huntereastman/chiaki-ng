@@ -128,6 +128,14 @@ def main():
         run(HERE / '.build-tools/bin/ctest', '--test-dir', build, '--output-on-failure')
         run('xcrun', 'swiftc', HERE / 'Sources/AnnexB.swift', HERE / 'Tests/BitstreamTests.swift', '-o', build / 'bitstream-tests')
         run(build / 'bitstream-tests')
+        run('xcrun', 'swiftc', HERE / 'Sources/AnnexB.swift', HERE / 'Sources/VideoPipeline.swift',
+            HERE / 'Sources/AmbientPalette.swift', HERE / 'Sources/AmbientLighting.swift',
+            HERE / 'Tests/AmbientPaletteTests.swift', '-o', build / 'ambient-palette-tests')
+        run(build / 'ambient-palette-tests')
+        run('xcrun', 'swiftc', HERE / 'Sources/AnnexB.swift', HERE / 'Sources/VideoPipeline.swift',
+            HERE / 'Sources/AmbientPalette.swift', HERE / 'Sources/AmbientLighting.swift', HERE / 'Tests/RendererReadbackTests.swift',
+            '-o', build / 'renderer-readback-tests')
+        run(build / 'renderer-readback-tests', HERE / 'Resources/AmbientProof.h264frames')
         run(sys.executable, HERE / 'Tests/BuildTests.py')
         return
     archives = core_archives(build)

@@ -14,6 +14,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', required=True)
     parser.add_argument('--host', help='Initial local PS5 address; never an account ID or pairing secret')
+    parser.add_argument('--no-launch', action='store_true', help='Install the qualified app without launching it (for a locked headset)')
     args = parser.parse_args()
     manifest = json.loads((HERE / 'build/xros/build-manifest.json').read_text())
     app = Path(manifest['appPath'])
@@ -29,6 +30,9 @@ def main():
     build.run('codesign', '--verify', '--strict', '--deep', app)
     build.run('xcrun', 'devicectl', 'device', 'install', 'app', '--device', args.device,
               '--json-output', HERE / 'build/xros/device-install.json', app)
+    if args.no_launch:
+        print('Installed qualified app; launch was not requested.')
+        return
     command = ['xcrun', 'devicectl', 'device', 'process', 'launch', '--device', args.device,
                '--json-output', HERE / 'build/xros/device-launch.json']
     if args.host: command += ['--environment-variables', json.dumps({'VRP_CONSOLE_HOST': args.host})]

@@ -46,6 +46,9 @@ targets:
       - sdk: GameController.framework
       - sdk: WebKit.framework
       - sdk: Security.framework
+      - sdk: CoreImage.framework
+      - sdk: RealityKit.framework
+      - sdk: VideoToolbox.framework
 schemes:
   VisionRemotePlay:
     build:

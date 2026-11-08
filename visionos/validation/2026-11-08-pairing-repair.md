@@ -39,6 +39,22 @@ The search socket now applies Apple's per-socket signal suppression while retain
 
 Local-network access is being checked separately. The observed EPIPE does not by itself prove the permission setting. Apple's [local network privacy technote](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy) explains that iOS, iPadOS and visionOS share this privacy model and that a first operation may be denied before the permission alert is answered. A correct usage description has been verified in the signed app's actual Info.plist; the user's headset setting is still pending.
 
+## Corrected physical test
+
+- Installed runtime source: `d2dfaa5ccfdce9472495df648ba178067b5fe289`.
+- Runtime source digest: `57785be18c619e9677f083b98650af55606b3c62137a337f6ae3f6fb09332fcc`.
+- Signed executable SHA-256: `2872bdcc58ea6cbf527135fb2474713a7e379f89bd5699bf4c774d8bd64d7c2d`.
+- The signed executable contained the fresh native logging marker and no temporary signal-override marker. The manifest records exactly eight target archives and their hashes. The guarded installer verified source identity, executable digest, embedded identity and code signature before updating the app in place.
+- With ordinary process signal handling, the automatic synthetic registration sent a five-byte discovery packet to the owned Mac fixture, established TCP, and received its deliberate HTTP 403 rejection. This is an expected negative protocol test, not console pairing.
+- The app remained running after the rejection. The device process listing matched the installed executable, and its sandbox diagnostic at `2026-11-08T09:10:23Z` reported the exact source above, `sceneActive: true`, `paired: false`, `connected: false`, and the normal pairing-failure status. No global signal ignore mode was enabled.
+- The full host run passed: 106/106 upstream cases, zero skipped; native bridge/input/lifecycle/ECDH checks; stream and datagram EPIPE checks in both blocking modes; Annex B parsing; and both archive-selection build regressions.
+
+Actual packet receipt establishes that local-network traffic worked in this corrected run. The exact user-facing permission-toggle value is no longer a blocking question, and no permission reset or bypass was performed. It does not establish why the earlier operation returned EPIPE.
+
+The app was then reopened in ordinary user-driven pairing mode, with the synthetic fixture driver unset. Its sandbox diagnostic at `2026-11-08T09:11:43Z` again confirmed the installed runtime source and active scene. Native error logging remains enabled for the next real PS5 attempt; it records no codes, account IDs, pairing keys or tokens. Hunter has been asked for a fresh Link Device pairing attempt, followed by Play if pairing succeeds.
+
+Status: **DONE_WITH_CONCERNS** for the isolated discovery termination and packaging defects. Real PS5 registration, visible gameplay, audio, controller response and reconnect acceptance remain pending. This report update is documentation only and does not describe another rebuilt or reinstalled executable.
+
 The exact remaining native failure, original pairing retry and gameplay acceptance remain pending. Sign-in and pairing Keychain items are preserved; the app is updated in place. No TestFlight upload, App Review submission, simulator creation or device reset is part of this repair.
 
 Raw logs and device receipts remain ignored local evidence. This is a sanitized account and does not preserve their exact original bytes.

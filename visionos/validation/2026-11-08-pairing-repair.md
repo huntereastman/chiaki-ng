@@ -1,5 +1,7 @@
 # Pairing termination investigation — 2026-11-08
 
+**Final result:** real PS5 registration and playback subsequently succeeded on the corrected build. The user confirmed success, and the installed app reported saved pairing and video/audio pipeline activity. See [successful playback](2026-11-08-successful-playback.md) for the exact evidence and remaining qualification limits. Earlier pending checkpoints below are historical.
+
 Hunter reported that Sony sign-in completed but tapping Pair PS5 closed the app. A diagnostic retrieved from the original installed app confirmed the account-link success status; no identifiers or credentials were copied into this note.
 
 ## Evidence and repair
@@ -53,8 +55,8 @@ Actual packet receipt establishes that local-network traffic worked in this corr
 
 The app was then reopened in ordinary user-driven pairing mode, with the synthetic fixture driver unset. Its sandbox diagnostic at `2026-11-08T09:11:43Z` again confirmed the installed runtime source and active scene. Native error logging remains enabled for the next real PS5 attempt; it records no codes, account IDs, pairing keys or tokens. Hunter has been asked for a fresh Link Device pairing attempt, followed by Play if pairing succeeds.
 
-Status: **DONE_WITH_CONCERNS** for the isolated discovery termination and packaging defects. Real PS5 registration, visible gameplay, audio, controller response and reconnect acceptance remain pending. This report update is documentation only and does not describe another rebuilt or reinstalled executable.
+Status: **DONE** for the discovery termination and packaging defects, with real PS5 registration and user-confirmed playback now accepted. Audible audio, Vision Pro controller input, sustained performance and reconnect reliability remain separately unqualified. These report updates are documentation only and do not describe another rebuilt or reinstalled executable.
 
-The exact remaining native failure, original pairing retry and gameplay acceptance remain pending. Sign-in and pairing Keychain items are preserved; the app is updated in place. No TestFlight upload, App Review submission, simulator creation or device reset is part of this repair.
+Sign-in and pairing Keychain items are preserved. No TestFlight upload, App Review submission, simulator creation or device reset is part of this repair.
 
 Raw logs and device receipts remain ignored local evidence. This is a sanitized account and does not preserve their exact original bytes.

@@ -17,6 +17,8 @@ Internet traversal, PSN cloud gaming, HDR, frame generation, upscaling, immersiv
 
 This is development software. Successful compilation and unit tests do not establish console pairing, visible video, audible sound, responsive control or session reliability. Record those results separately after real-device tests.
 
+On November 8, 2026, the user confirmed successful playback from their real PS5 on their Vision Pro. Device diagnostics independently confirmed saved pairing, 1,057 queued video frames and audio pipeline activity. See the [physical-device acceptance record](validation/2026-11-08-successful-playback.md) for the exact installed source, artifact and remaining qualification limits.
+
 ## Source and dependencies
 
 Integration base: `chiaki-ng/chiaki-ng`, `main`, commit `43728af2e639fecb8a7af1cd68c29820a40de973`.
@@ -42,7 +44,7 @@ git -C visionos/Dependencies/mbedtls submodule update --init --depth 1 framework
 python3 visionos/build.py host
 ```
 
-Host validation runs the upstream protocol tests, local-only bridge validation and ECDH key agreement, and Swift Annex B parser boundary tests.
+Host validation runs the upstream protocol tests, local-only bridge validation and ECDH key agreement, stream/datagram EPIPE regressions, Swift Annex B parser boundary tests, and real-link archive-selection regressions.
 
 For the physical Vision Pro:
 

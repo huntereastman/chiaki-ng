@@ -8,3 +8,4 @@ Sources/GeneratedPSN.swift
 VisionRemotePlay.xcodeproj/
 *.mobileprovision
 *.xcresult
+__pycache__/

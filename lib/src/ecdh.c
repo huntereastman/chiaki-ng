@@ -7,6 +7,12 @@
 #ifdef CHIAKI_LIB_ENABLE_MBEDTLS
 #include "mbedtls/entropy.h"
 #include "mbedtls/md.h"
+#include "mbedtls/version.h"
+#if MBEDTLS_VERSION_MAJOR >= 3 && !defined(MBEDTLS_ECDH_LEGACY_CONTEXT)
+#define CHIAKI_ECDH_CTX(e) ((e)->ctx.ctx.mbed_ecdh)
+#else
+#define CHIAKI_ECDH_CTX(e) ((e)->ctx)
+#endif
 #else
 #include <openssl/evp.h>
 #include <openssl/ec.h>
@@ -45,10 +51,10 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ecdh_init(ChiakiECDH *ecdh)
 		(const unsigned char *) pers, sizeof pers));
 
 	// build MBEDTLS_ECP_DP_SECP256K1 group
-	CHECK(mbedtls_ecp_group_load(&ecdh->ctx.grp, MBEDTLS_ECP_DP_SECP256K1));
+	CHECK(mbedtls_ecdh_setup(&ecdh->ctx, MBEDTLS_ECP_DP_SECP256K1));
 	// build key
-	CHECK(mbedtls_ecdh_gen_public(&ecdh->ctx.grp, &ecdh->ctx.d,
-		&ecdh->ctx.Q, mbedtls_ctr_drbg_random, &ecdh->drbg));
+	CHECK(mbedtls_ecdh_gen_public(&CHIAKI_ECDH_CTX(ecdh).grp, &CHIAKI_ECDH_CTX(ecdh).d,
+		&CHIAKI_ECDH_CTX(ecdh).Q, mbedtls_ctr_drbg_random, &ecdh->drbg));
 
 	// relese entropy ptr
 	mbedtls_entropy_free(&entropy);
@@ -88,19 +94,23 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ecdh_set_local_key(ChiakiECDH *ecdh, const 
 
 	// public
 	int r = 0;
-	r = mbedtls_ecp_point_read_binary(&ecdh->ctx.grp, &ecdh->ctx.Q, public_key, public_key_size);
+	r = mbedtls_ecp_point_read_binary(&CHIAKI_ECDH_CTX(ecdh).grp, &CHIAKI_ECDH_CTX(ecdh).Q, public_key, public_key_size);
 	if(r != 0)
 		return CHIAKI_ERR_UNKNOWN;
 
 	// secret
-	r = mbedtls_mpi_read_binary(&ecdh->ctx.d, private_key, private_key_size);
+	r = mbedtls_mpi_read_binary(&CHIAKI_ECDH_CTX(ecdh).d, private_key, private_key_size);
 	if(r != 0)
 		return CHIAKI_ERR_UNKNOWN;
 
-	// regen key
-	r = mbedtls_ecdh_gen_public(&ecdh->ctx.grp, &ecdh->ctx.d, &ecdh->ctx.Q, mbedtls_ctr_drbg_random, &ecdh->drbg);
+	// Validate the supplied key pair. Generating another pair here would replace
+	// the caller's private key and invalidate deterministic protocol vectors.
+	r = mbedtls_ecp_check_privkey(&CHIAKI_ECDH_CTX(ecdh).grp, &CHIAKI_ECDH_CTX(ecdh).d);
 	if(r != 0)
-		return CHIAKI_ERR_UNKNOWN;
+		return CHIAKI_ERR_INVALID_DATA;
+	r = mbedtls_ecp_check_pubkey(&CHIAKI_ECDH_CTX(ecdh).grp, &CHIAKI_ECDH_CTX(ecdh).Q);
+	if(r != 0)
+		return CHIAKI_ERR_INVALID_DATA;
 
 	return CHIAKI_ERR_SUCCESS;
 #else
@@ -155,7 +165,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ecdh_get_local_pub_key(ChiakiECDH *ecdh, ui
 	}} while(0)
 	// extract pub key to build dh shared secret
 	// this key is sent to the remote server
-	GOTO_ERROR(mbedtls_ecp_point_write_binary( &ecdh->ctx.grp, &ecdh->ctx.Q,
+	GOTO_ERROR(mbedtls_ecp_point_write_binary( &CHIAKI_ECDH_CTX(ecdh).grp, &CHIAKI_ECDH_CTX(ecdh).Q,
 		MBEDTLS_ECP_PF_UNCOMPRESSED, key_out_size, key_out, *key_out_size ));
 
 	// https://tls.mbed.org/module-level-design-hashing
@@ -199,18 +209,18 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ecdh_derive_secret(ChiakiECDH *ecdh, uint8_
 		goto error;} \
 	} while(0)
 
-	GOTO_ERROR(mbedtls_mpi_lset(&ecdh->ctx.Qp.Z, 1));
+	GOTO_ERROR(mbedtls_mpi_lset(&CHIAKI_ECDH_CTX(ecdh).Qp.Z, 1));
 	// load Qp point form remote PK
-	GOTO_ERROR(mbedtls_ecp_point_read_binary(&ecdh->ctx.grp,
-		&ecdh->ctx.Qp, remote_key, remote_key_size));
+	GOTO_ERROR(mbedtls_ecp_point_read_binary(&CHIAKI_ECDH_CTX(ecdh).grp,
+		&CHIAKI_ECDH_CTX(ecdh).Qp, remote_key, remote_key_size));
 
 	// build shared secret (diffie-hellman)
-	GOTO_ERROR(mbedtls_ecdh_compute_shared(&ecdh->ctx.grp,
-		&ecdh->ctx.z, &ecdh->ctx.Qp, &ecdh->ctx.d,
+	GOTO_ERROR(mbedtls_ecdh_compute_shared(&CHIAKI_ECDH_CTX(ecdh).grp,
+		&CHIAKI_ECDH_CTX(ecdh).z, &CHIAKI_ECDH_CTX(ecdh).Qp, &CHIAKI_ECDH_CTX(ecdh).d,
 		mbedtls_ctr_drbg_random, &ecdh->drbg));
 
 	// export shared secret to data buffer
-	GOTO_ERROR(mbedtls_mpi_write_binary(&ecdh->ctx.z,
+	GOTO_ERROR(mbedtls_mpi_write_binary(&CHIAKI_ECDH_CTX(ecdh).z,
 		secret_out, CHIAKI_ECDH_SECRET_SIZE));
 
 	return CHIAKI_ERR_SUCCESS;

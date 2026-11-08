@@ -2,7 +2,9 @@
 
 #include <chiaki/common.h>
 
+#ifndef CHIAKI_LOCAL_ONLY
 #include "aia.h"
+#endif
 #include <chiaki/fec.h>
 #include <chiaki/random.h>
 
@@ -105,9 +107,11 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_lib_init()
 	}
 #endif
 
+#ifndef CHIAKI_LOCAL_ONLY
 	ChiakiErrorCode aia_err = chiaki_aia_init();
 	if(aia_err != CHIAKI_ERR_SUCCESS)
 		return aia_err;
+#endif
 
 	return CHIAKI_ERR_SUCCESS;
 }

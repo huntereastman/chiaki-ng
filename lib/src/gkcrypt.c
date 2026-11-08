@@ -11,6 +11,7 @@
 #include "mbedtls/md.h"
 #include "mbedtls/gcm.h"
 #include "mbedtls/sha256.h"
+#include "mbedtls/version.h"
 #else
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -386,12 +387,15 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_gkcrypt_gmac(ChiakiGKCrypt *gkcrypt, uint64
 		return CHIAKI_ERR_UNKNOWN;
 	}
 
-	// encrypt without additional data
+	// crypt_and_tag below initializes its own operation. Keep this legacy call
+	// only for mbedTLS 2.x, whose starts signature included additional data.
+#if MBEDTLS_VERSION_MAJOR < 3
 	if(mbedtls_gcm_starts(&actx, MBEDTLS_GCM_ENCRYPT, iv, CHIAKI_GKCRYPT_BLOCK_SIZE, NULL, 0) != 0)
 	{
 		mbedtls_gcm_free(&actx);
 		return CHIAKI_ERR_UNKNOWN;
 	}
+#endif
 	// set "additional data" only whitout input nor output
 	// to get the same result as:
 	// EVP_EncryptUpdate(ctx, NULL, &len, buf, (int)buf_size)

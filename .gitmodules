@@ -22,3 +22,9 @@
 [submodule "third-party/cpp-steam-tools"]
 	path = third-party/cpp-steam-tools
 	url = https://github.com/streetpea/cpp-steam-tools.git
+[submodule "visionos/Dependencies/mbedtls"]
+	path = visionos/Dependencies/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
+[submodule "visionos/Dependencies/opus"]
+	path = visionos/Dependencies/opus
+	url = https://github.com/xiph/opus.git

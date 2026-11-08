@@ -1,0 +1,10 @@
+.build-tools/
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+Local.xcconfig
+Sources/GeneratedPSN.swift
+VisionRemotePlay.xcodeproj/
+*.mobileprovision
+*.xcresult

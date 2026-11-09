@@ -51,6 +51,15 @@ final class ExtremeGPUReceipt: @unchecked Sendable {
     private var lastRoomActive = false
     private var lastReceiptTime = 0.0
     private(set) var ready = false
+    private let support = LightingRuntimeSupport.current
+
+    var compatibilityMessage: String? {
+#if os(visionOS)
+        if !support.surroundingsLight { return "Room lighting is unavailable on this visionOS version. The light sheets still work." }
+#endif
+        if !support.projectiveTexture { return "Colored room light is available. Animated room patterns are unavailable on this system version." }
+        return nil
+    }
 
     enum Failure: LocalizedError {
         case device, function(String)
@@ -98,15 +107,16 @@ final class ExtremeGPUReceipt: @unchecked Sendable {
             meshes.append(mesh); sheetTextures.append(texture)
         }
         for index in 0..<3 {
-            let texture = try Self.makeTexture(width: 512, height: 512)
             let light = Entity()
             light.name = "Projected room light \(index)"
             light.components.set(SpotLightComponent(color: .white, intensity: 0,
                 innerAngleInDegrees: 46, outerAngleInDegrees: 94, attenuationRadius: 3.8))
-            if #available(visionOS 27.0, macOS 27.0, *) {
-                light.components.set(SpotLightComponent.ProjectiveTexture(texture: try await TextureResource(from: texture)))
+            if support.projectiveTexture {
+                let texture = try Self.makeTexture(width: 512, height: 512)
+                support.applyProjectiveTexture(try await TextureResource(from: texture), to: light)
+                projectionTextures.append(texture)
             }
-            root.addChild(light); lights.append(light); projectionTextures.append(texture)
+            root.addChild(light); lights.append(light)
         }
         positionLights()
         // Initialize every GPU resource before RealityKit can make it visible.
@@ -169,23 +179,35 @@ final class ExtremeGPUReceipt: @unchecked Sendable {
         self.reduceMotion = reduceMotion
         let thermal = ProcessInfo.processInfo.thermalState
         root.isEnabled = enabled && !runtimeError && thermal != .critical
-        let roomActive = root.isEnabled && roomAllowed && palette.average.luminance > 0.0005
-        if roomActive != lastRoomActive {
-            lastRoomActive = roomActive
-            for (index, light) in lights.enumerated() {
+        var roomActive = root.isEnabled && roomAllowed && palette.average.luminance > 0.0005
+#if os(visionOS)
+        roomActive = roomActive && support.surroundingsLight
+#endif
+        let changed = roomActive != lastRoomActive
+        lastRoomActive = roomActive
+        for (index, light) in lights.enumerated() {
+            if changed || !support.projectiveTexture {
                 var component = light.components[SpotLightComponent.self]!
                 // Textured projections lose considerable energy through their
                 // soft mask. Qualified in the native virtual-room preview;
                 // physical surroundings brightness still needs headset review.
-                component.intensity = roomActive ? (index == 2 ? 85000 : 150000) : 0
-                light.components.set(component)
-#if os(visionOS)
-                if #available(visionOS 27.0, *) {
-                    if roomActive { light.components.set(SpotLightComponent.SurroundingsLight()) }
-                    else { light.components.remove(SpotLightComponent.SurroundingsLight.self) }
-                }
+                if support.projectiveTexture {
+                    component.intensity = roomActive ? (index == 2 ? 85000 : 150000) : 0
+                } else {
+                    // Unmasked fallback must not use the much stronger white
+                    // projection intensity. Keep directional live color at the
+                    // same scale as Simple's qualified colored lights.
+                    let color = [palette.left, palette.right, palette.bottom][index]
+#if canImport(UIKit)
+                    component.color = color.uiColor
+#else
+                    component.color = .init(srgbRed: CGFloat(color.red), green: CGFloat(color.green), blue: CGFloat(color.blue), alpha: 1)
 #endif
+                    component.intensity = roomActive ? (index == 2 ? 450 : 650) : 0
+                }
+                light.components.set(component)
             }
+            if changed { support.applySurroundingsLight(roomActive, to: light) }
         }
         if !root.isEnabled { accumulated = 0 }
     }
@@ -255,6 +277,13 @@ final class ExtremeGPUReceipt: @unchecked Sendable {
         value["sheetCount"] = meshes.count; value["roomLightsActive"] = lastRoomActive ? lights.count : 0
         value["screenWidthMeters"] = screenWidth; value["animationSeconds"] = time
         value["runtimeError"] = runtimeError
+        value["projectiveTextureSupported"] = support.projectiveTexture
+        value["surroundingsLightSupported"] = support.surroundingsLight
+        value["missingLightingSymbols"] = support.missingSymbols
+        value["roomLightingMode"] = support.projectiveTexture ? "textured" : "color"
+#if os(visionOS)
+        if !support.surroundingsLight { value["roomLightingMode"] = "unavailable" }
+#endif
         return value
     }
     func stop() {

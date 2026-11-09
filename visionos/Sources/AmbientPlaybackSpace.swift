@@ -33,10 +33,7 @@ private struct PlayerFrameKey: PreferenceKey {
             entity.components.set(SpotLightComponent(color: color.uiColor,
                 intensity: active ? 650 : 0, innerAngleInDegrees: 35,
                 outerAngleInDegrees: 80, attenuationRadius: 3.2))
-            if #available(visionOS 27.0, *) {
-                if active { entity.components.set(SpotLightComponent.SurroundingsLight()) }
-                else { entity.components.remove(SpotLightComponent.SurroundingsLight.self) }
-            }
+            LightingRuntimeSupport.current.applySurroundingsLight(active, to: entity)
         }
     }
 }
@@ -67,7 +64,7 @@ private struct PlayerFrameKey: PreferenceKey {
                 guard !Task.isCancelled, model.showingVideo, model.playbackSpace != .closing else { effect.stop(); return }
                 rig.root.addChild(effect.root)
                 extreme = effect
-                lighting.extremeError = nil
+                lighting.extremeError = effect.compatibilityMessage
                 effect.subscribe(to: content) { lighting.extremeDiagnostics = $0 }
                 updateExtreme(attachments.entity(for: "player"))
             } catch {

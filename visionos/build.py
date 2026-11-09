@@ -45,8 +45,9 @@ def output(*args):
 def source_digest():
     digest = hashlib.sha256()
     paths = [p for base in [ROOT / 'lib', HERE / 'Sources', HERE / 'Native'] for p in base.rglob('*')
-             if p.is_file() and p.suffix in ['.c', '.h', '.swift', '.proto']]
+             if p.is_file() and p.suffix in ['.c', '.h', '.swift', '.proto', '.metal']]
     paths += [HERE / 'CMakeLists.txt', HERE / 'project.yml', HERE / 'Info.plist', HERE / 'build.py', ROOT / '.gitmodules']
+    if (HERE / 'build-reusing-native.py').exists(): paths += [HERE / 'build-reusing-native.py']
     paths += [p for p in (HERE / 'Resources').rglob('*') if p.is_file()]
     for path in sorted(paths):
         digest.update(str(path.relative_to(ROOT)).encode() + b'\0' + path.read_bytes() + b'\0')

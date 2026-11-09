@@ -3,6 +3,13 @@ import GameController
 import RealityKit
 import SwiftUI
 
+private struct PlayerFrameKey: PreferenceKey {
+    static var defaultValue = CGRect.zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue(); if !next.isEmpty { value = next }
+    }
+}
+
 @MainActor private final class AmbientRoomRig {
     let root = Entity()
     private let left = Entity(), right = Entity()
@@ -41,7 +48,10 @@ import SwiftUI
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rig = AmbientRoomRig()
+    @State private var extreme: ExtremeLightRig?
+    @State private var playerFrame = CGRect(x: 200, y: 146, width: 1180, height: 663.75)
     @State private var controlsVisible = true
     @State private var controlInteraction = 0
 
@@ -51,15 +61,28 @@ import SwiftUI
             if let player = attachments.entity(for: "player") {
                 rig.attachPlayer(player)
             }
-            rig.update(lighting.palette, enabled: lighting.enabled && lighting.roomLightAllowed)
+            rig.update(lighting.palette, enabled: lighting.enabled && lighting.mode == .simple && lighting.roomLightAllowed)
+            do {
+                let effect = try await ExtremeLightRig()
+                guard !Task.isCancelled, model.showingVideo, model.playbackSpace != .closing else { effect.stop(); return }
+                rig.root.addChild(effect.root)
+                extreme = effect
+                lighting.extremeError = nil
+                effect.subscribe(to: content) { lighting.extremeDiagnostics = $0 }
+                updateExtreme(attachments.entity(for: "player"))
+            } catch {
+                lighting.extremeError = "Extreme could not start. Simple is available."
+                lighting.extremeDiagnostics = ["loadError": error.localizedDescription]
+            }
         } update: { _, attachments in
             if let player = attachments.entity(for: "player") { rig.attachPlayer(player) }
-            rig.update(lighting.palette, enabled: lighting.enabled && lighting.roomLightAllowed)
+            rig.update(lighting.palette, enabled: lighting.enabled && lighting.mode == .simple && lighting.roomLightAllowed)
+            updateExtreme(attachments.entity(for: "player"))
         } attachments: {
             Attachment(id: "player") {
                 VStack(spacing: 28) {
                     ZStack {
-                        if lighting.enabled {
+                        if lighting.enabled && lighting.mode == .simple {
                             AmbientHalo(palette: lighting.palette).padding(-140)
                         }
                         StreamView(pipeline: model.engine.video)
@@ -69,10 +92,16 @@ import SwiftUI
                             .shadow(color: .black.opacity(0.65), radius: 28, y: 18)
                         if model.videoFrames == 0 { ProgressView().controlSize(.large) }
                     }.frame(width: 1180, height: 663.75)
+                        .background(GeometryReader { geometry in
+                            Color.clear.preference(key: PlayerFrameKey.self, value: geometry.frame(in: .named("ambient-player")))
+                        })
                     HStack(spacing: 24) {
                         Toggle(isOn: $lighting.enabled) {
                             Label("Ambient lighting", systemImage: "lightbulb.max.fill")
                         }.toggleStyle(.button)
+                        Picker("Lighting mode", selection: $lighting.mode) {
+                            ForEach(AmbientLightingMode.allCases) { mode in Text(mode.title).tag(mode) }
+                        }.pickerStyle(.segmented).frame(width: 260).disabled(!lighting.enabled)
                         Button("PS button", systemImage: "gamecontroller") { model.engine.pressPS() }
                             .labelStyle(.iconOnly).disabled(!model.connected)
                         Button("Window", systemImage: "rectangle.on.rectangle") { returnToWindow() }
@@ -86,9 +115,14 @@ import SwiftUI
                     .opacity(controlsVisible || voiceOverEnabled ? 1 : 0)
                     .allowsHitTesting(controlsVisible || voiceOverEnabled)
                     .accessibilityHidden(!controlsVisible && !voiceOverEnabled)
+                    if let message = lighting.extremeError, lighting.mode == .extreme {
+                        Text(message).font(.callout).foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 200).padding(.vertical, 140)
                 .frame(width: 1580, height: 1060)
+                .coordinateSpace(name: "ambient-player")
+                .onPreferenceChange(PlayerFrameKey.self) { if !$0.isEmpty { playerFrame = $0 } }
                 .contentShape(Rectangle())
                 .simultaneousGesture(TapGesture().onEnded {
                     controlsVisible = true; controlInteraction += 1
@@ -109,6 +143,7 @@ import SwiftUI
         }
         .onDisappear {
             rig.update(.black, enabled: false)
+            extreme?.stop()
             model.spaceRequest = UUID()
             model.prefersWindow = true
             model.playbackSpace = .window
@@ -119,6 +154,18 @@ import SwiftUI
             model.setSceneActive(phase == .active, immersive: true, background: phase == .background)
         }
         .onChange(of: model.showingVideo) { _, playing in if !playing { returnToWindow() } }
+    }
+    private func updateExtreme(_ player: ViewAttachmentEntity?) {
+        guard let extreme else { return }
+        if let player {
+            let metersPerPoint = player.visualBounds(relativeTo: rig.root).extents.x / 1580
+            extreme.setScreen(width: Float(playerFrame.width)*metersPerPoint,
+                center: [(Float(playerFrame.midX)-790)*metersPerPoint,
+                         (530-Float(playerFrame.midY))*metersPerPoint, -0.015])
+        }
+        extreme.update(palette: lighting.palette,
+            enabled: lighting.enabled && lighting.mode == .extreme && scenePhase == .active,
+            roomAllowed: lighting.roomLightAllowed, reduceMotion: reduceMotion)
     }
     private func returnToWindow() {
         guard model.playbackSpace != .closing else { return }

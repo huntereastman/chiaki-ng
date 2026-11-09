@@ -37,6 +37,8 @@ import Foundation
         defer { defaults.removePersistentDomain(forName: suite) }
         let first = AmbientLighting(video: VideoPipeline(), defaults: defaults)
         precondition(first.enabled, "First-run lighting should be enabled")
+        precondition(first.mode == .extreme, "This prototype should open the requested Extreme treatment")
+        first.mode = .simple
         first.setSceneActive(true); first.setPlaying(true)
         precondition(first.diagnostics()["sampling"] as? Bool == true)
         first.enabled = false
@@ -44,6 +46,9 @@ import Foundation
         precondition(first.palette == .black, "Off must clear the glow")
         let relaunched = AmbientLighting(video: VideoPipeline(), defaults: defaults)
         precondition(!relaunched.enabled, "Saved off setting must survive model recreation")
+        precondition(relaunched.mode == .simple, "Simple must stay selected across off/on and relaunch")
+        relaunched.mode = .extreme
+        precondition(AmbientLighting(video: VideoPipeline(), defaults: defaults).mode == .extreme, "Extreme selection must persist independently")
         relaunched.enabled = true
         precondition(AmbientLighting(video: VideoPipeline(), defaults: defaults).enabled, "Saved on setting must survive model recreation")
         print("Ambient lighting: actual color reduction, orientation, black/white bounds, invalid extents, shifted origins, cadence independence, stale fade, saved on/off and stopping sampling passed.")

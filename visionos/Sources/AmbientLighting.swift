@@ -2,7 +2,18 @@
 import AVFoundation
 import SwiftUI
 
+enum AmbientLightingMode: String, CaseIterable, Identifiable {
+    case simple, extreme
+    var id: String { rawValue }
+    var title: String { self == .simple ? "Simple" : "Extreme" }
+}
+
 @MainActor final class AmbientLighting: ObservableObject {
+    @Published var mode: AmbientLightingMode {
+        didSet { defaults.set(mode.rawValue, forKey: Self.modePreferenceKey) }
+    }
+    @Published var extremeError: String?
+    var extremeDiagnostics: [String: Any] = [:]
     @Published var enabled: Bool {
         didSet {
             defaults.set(enabled, forKey: Self.preferenceKey)
@@ -13,6 +24,7 @@ import SwiftUI
     @Published private(set) var palette = AmbientPalette.black
     @Published private(set) var roomLightAllowed = true
     static let preferenceKey = "ambientLightingEnabled"
+    static let modePreferenceKey = "ambientLightingMode"
     private let defaults: UserDefaults
     private let video: VideoPipeline
     private let queue = DispatchQueue(label: "visionremote.ambient", qos: .utility)
@@ -39,6 +51,7 @@ import SwiftUI
 
     init(video: VideoPipeline, defaults: UserDefaults = .standard) {
         self.video = video; self.defaults = defaults
+        mode = defaults.string(forKey: Self.modePreferenceKey).flatMap(AmbientLightingMode.init(rawValue:)) ?? .extreme
         enabled = defaults.object(forKey: Self.preferenceKey) as? Bool ?? true
     }
 
@@ -114,13 +127,15 @@ import SwiftUI
         palette = now - lastVideoObserved >= 2 ? .black : palette.approaching(target, elapsed: elapsed)
     }
     func diagnostics() -> [String: Any] {
-        var result: [String: Any] = ["enabled": enabled, "sampling": timer != nil,
+        var result: [String: Any] = ["enabled": enabled, "mode": mode.rawValue, "sampling": timer != nil,
             "samples": samples, "readAttempts": readAttempts, "misses": misses,
             "lastSampleMS": lastSampleMS, "roomLightAllowed": roomLightAllowed,
             "colorSource": colorSource,
             "decoderStatus": decoderStatus,
             "paletteLuminance": palette.average.luminance]
         if let lastReadbackRate { result["rendererRate"] = lastReadbackRate }
+        result["extreme"] = extremeDiagnostics
+        if let extremeError { result["extremeError"] = extremeError }
 #if DEBUG
         if ProcessInfo.processInfo.environment["VRP_AMBIENT_PROOF"] == "1" {
             result["proofLeftRGB"] = [palette.left.red, palette.left.green, palette.left.blue]

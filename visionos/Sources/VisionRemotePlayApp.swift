@@ -46,6 +46,9 @@ struct RemotePlayView: View {
                                     Text("720p · 60 fps").tag(720)
                                 }.disabled(model.connected || model.busy)
                                 Toggle("Ambient lighting", isOn: $lighting.enabled)
+                                Picker("Lighting mode", selection: $lighting.mode) {
+                                    ForEach(AmbientLightingMode.allCases) { mode in Text(mode.title).tag(mode) }
+                                }.pickerStyle(.segmented).disabled(!lighting.enabled)
                             }.padding(.top, 8)
                         }
                         GroupBox("PlayStation account") {

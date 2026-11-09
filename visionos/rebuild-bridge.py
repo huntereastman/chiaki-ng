@@ -48,6 +48,9 @@ else: shutil.copy2(archive,before)
 def members(path):
     names = subprocess.check_output(['xcrun','ar','-t',str(path)],text=True).splitlines()
     assert len(names) == len(set(names)), 'Duplicate native object names'
+    # ranlib rebuilds the archive's symbol index when the bridge changes. It is
+    # container metadata; every compiled member still requires byte equality.
+    names = [n for n in names if not n.startswith('__.SYMDEF')]
     return {n: hashlib.sha256(subprocess.check_output(['xcrun','ar','-p',str(path),n])).hexdigest() for n in names}
 old_members = members(archive)
 source = build.HERE/'Native/RemotePlayBridge.c'

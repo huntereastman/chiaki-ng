@@ -87,6 +87,14 @@ static void audio_callback(int16_t *samples, size_t count, void *user) {
     VRPClient *c = user;
     if(c->callbacks.audio) c->callbacks.audio(c->user, samples, count);
 }
+static void display_callback(void *user, bool cant_display) {
+    VRPClient *c = user;
+    if(cant_display) {
+        // The control handshake and later display notifications call this sink
+        // unconditionally. Use the existing asynchronous error/disconnect path.
+        status(c, 5, "Your PS5 is showing a screen that cannot be streamed. Return to the PS5 home screen or a game, then try Play again.");
+    }
+}
 static void session_callback(ChiakiEvent *event, void *user) {
     VRPClient *c = user;
     switch(event->type) {
@@ -160,6 +168,8 @@ int vrp_connect(VRPClient *c, const char *host, const uint8_t *pairing, size_t s
     c->initialized = true;
     chiaki_session_set_event_cb(&c->session, session_callback, c);
     chiaki_session_set_video_sample_cb(&c->session, video_callback, c);
+    ChiakiCtrlDisplaySink display_sink = { .user = c, .cantdisplay_cb = display_callback };
+    chiaki_session_ctrl_set_display_sink(&c->session, &display_sink);
     ChiakiAudioSink sink;
     chiaki_opus_decoder_get_sink(&c->audio, &sink);
     chiaki_session_set_audio_sink(&c->session, &sink);

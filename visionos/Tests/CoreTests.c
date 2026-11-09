@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+// Exercise the production bridge's real session initialization, replacing only
+// the asynchronous network start with the same display-sink notification that
+// the control handshake delivers for RP-Prohibit. No console is contacted.
+#ifdef __APPLE__
+#define chiaki_session_start test_session_start
+#include "../Native/RemotePlayBridge.c"
+#undef chiaki_session_start
+#else
 #include "RemotePlayBridge.h"
+#endif
 #include <chiaki/ecdh.h>
 #include <chiaki/session.h>
 #include <assert.h>
@@ -9,6 +18,42 @@
 #include "../../lib/src/utils.h"
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
+
+static bool test_cant_display;
+static int test_status, test_status_calls;
+static void capture_display_status(void *user, int state, const char *message) {
+    assert(user == &test_status);
+    test_status = state; test_status_calls++;
+    assert(message && strstr(message, "PS5"));
+}
+ChiakiErrorCode test_session_start(ChiakiSession *session) {
+    // An absent sink reproduces the installed app's branch to address zero.
+    session->display_sink.cantdisplay_cb(session->display_sink.user, test_cant_display);
+    return CHIAKI_ERR_CANCELED; // No thread was started; normal initialization cleanup follows.
+}
+static bool display_notifications_are_handled(void) {
+    pid_t child = fork();
+    if(child < 0) return false;
+    if(child == 0) {
+        struct rlimit limit = {0, 0}; setrlimit(RLIMIT_CORE, &limit);
+        VRPCallbacks callbacks = { .status = capture_display_status };
+        VRPClient *client = vrp_create(callbacks, &test_status);
+        uint8_t pairing[VRP_PAIRING_SIZE] = {0};
+        memcpy(pairing, "CVRP", 4); pairing[4] = 1;
+        for(int blocked = 0; blocked < 2; blocked++) {
+            test_cant_display = blocked; test_status = 0; test_status_calls = 0;
+            if(vrp_connect(client, "192.168.1.1", pairing, sizeof(pairing), 1080) != CHIAKI_ERR_CANCELED) _exit(2);
+            if(blocked && (test_status != 5 || test_status_calls != 1)) _exit(3);
+            if(!blocked && test_status_calls != 0) _exit(4);
+        }
+        vrp_destroy(client); _exit(0);
+    }
+    int result;
+    if(waitpid(child, &result, 0) != child) return false;
+    if(WIFSIGNALED(result)) fprintf(stderr, "Display restriction notification terminated with signal %d.\n", WTERMSIG(result));
+    return WIFEXITED(result) && WEXITSTATUS(result) == 0;
+}
 
 static bool closed_write_returns_error(bool nonblock, int socket_type) {
     // Keep the default signal disposition in a child so this catches process
@@ -49,6 +94,8 @@ static bool closed_write_returns_error(bool nonblock, int socket_type) {
 
 int main(void) {
 #ifdef __APPLE__
+    if(!display_notifications_are_handled()) return 1;
+    puts("Allowed and prohibited display notifications complete without terminating the process.");
     if(!closed_write_returns_error(true, SOCK_STREAM) || !closed_write_returns_error(false, SOCK_STREAM) ||
        !closed_write_returns_error(true, SOCK_DGRAM) || !closed_write_returns_error(false, SOCK_DGRAM)) return 1;
     puts("Closed-peer writes return network errors without terminating the process.");
